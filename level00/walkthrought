@@ -1,0 +1,1 @@
+Quand on disass le binaire, on voit que le programe demande de rentrer un password saisi avec un scanf. Il va ensuite comparer l'entree avec 0x149c (5276) et ouvrir un shell si les deux valeures sont egales.
