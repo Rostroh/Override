@@ -1,0 +1,60 @@
+On voit que la fonction affiche un prompt et nous demande de rentrer un login depuis un fgets. Elle va ensuite nous demander de rentrer un serial avec un scanf.
+Ensuite, elle va appeler une fonction auth qui va essayer de chiffrer le login et regarder s'il correspond au serial rentre precedement. Dans le cas echeant, il ouvre un shell.
+
+On va chercher a regarder avec quelle valeur la fonction auth compare le login chiffre afin de l'utiliser pour ouvrir le shell.
+
+En lancant level06 sous gdb avec login=rostroh et serial=12345, on voit que le programme affiche un TAMPERING DETECTED et quitte (il utilise ptrace pour savoir si nous sommes dans un debugger). Nous allons break juste avant le call a ptrace:
+b * 0x08048796
+et juste avant la comparaison:
+b * 0x08048866
+continuer l'excussion du programme avec r:
+(gdb) r
+Starting program: /home/users/level06/level06 
+***********************************
+*		level06		  *
+***********************************
+-> Enter Login: rostroh
+***********************************
+***** NEW ACCOUNT DETECTED ********
+***********************************
+-> Enter Serial: 12345
+
+Breakpoint 1, 0x08048796 in auth ()
+
+Jump sur la fonction de chiffrement: 
+(gdb) jump * 0x080487ed
+Continuing at 0x80487ed.
+
+Breakpoint 2, 0x08048866 in auth ()
+
+La comparaison se faisant sur la ligne:
+0x08048866 <+286>:	cmp    eax,DWORD PTR [ebp-0x10]
+
+Nous allons pouvoir avoir les valeurs des differents registrers avec i r:
+(gdb) i r
+eax            0x3039	12345
+ecx            0x5f1a93	6232723
+edx            0x3c6	966
+ebx            0xf7fceff4	-134418444
+esp            0xffffd680	0xffffd680
+ebp            0xffffd6a8	0xffffd6a8
+esi            0x0	0
+edi            0x0	0
+eip            0x8048866	0x8048866 <auth+286>
+eflags         0x246	[ PF ZF IF ]
+cs             0x23	35
+ss             0x2b	43
+ds             0x2b	43
+es             0x2b	43
+fs             0x0	0
+gs             0x63	99
+
+On voit que eax = 0x3039 (soit 12345) et epb = 0xffffd6a8. La valeur que nous cherchons etant a epb - 0x10, on va regarder le contenu de l'adresse 0xffffd698:
+(gdb) x/wx 0xffffd698
+0xffffd698:	0x005f1ec1
+
+En regardant avec python, on voit que:
+>>> 0x005f1ec1
+6233793
+
+Maintenant, en lancant le level06 sans gdb, nous sommes en mesure d'ouvrir un shell avec login="rostroh" et serial="6233793"

