@@ -19,5 +19,6 @@ int			main(int argc, char **argv)
 		key = key + (argv[1][i] ^ key) % 0x539;
 		i++;
 	}
+	printf("%s\n", key);
 	return (0);
 }

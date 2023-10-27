@@ -67,5 +67,6 @@ int			main(int argc, char **argv)
 				//printf("%c%c%c%c\n", argv[i][2], argv[i][3], argv[i][4], argv[i][5]);
 		}
 	}
+	printf("\n");
 	return (0);
 }

